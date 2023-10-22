@@ -111,21 +111,28 @@ class Collector:
 
     def collect_submissions(self, inputfile, target):
         submissions = []
-        pattern_student = (r"^(?P<number>[0-9]{8})_"
+
+        pattern_student_learn = (r"^(?P<number>[0-9]{8})_"
                            r"(?P<firstname>[^_]+)_"
                            r"(?P<lastname>[^_]+)_"
                            r"(?P<filename>.+)")
-        pattern_group = (r"^(?P<isgroup>Gruppe|Group) (?P<number>[0-9]+)_"
+        pattern_student_canvas = (r"^(?P<fullname>[^_]+)_"
+                           r"(?P<x>[0-9]+)_"
+                           r"(?P<y>[0-9]+)_"
+                           r"(?P<courseid>[0-9]+)_"
+                           r"(?P<asgmt>[^_]+)_"
+                           r"(?P<number>[0-9]{8})")
+        pattern_group_learn = (r"^(?P<isgroup>Gruppe|Group) (?P<number>[0-9]+)_"
                          r"(?P<firstname>[^_]*)_?"
                          r"(?P<lastname>[^_]*)_"
                          r"(?P<filename>.+)")
+        # TODO: pattern_group_canvas
         filename, ext = os.path.splitext(inputfile)
         basename = os.path.basename(inputfile)
         errors = []
 
         gre = Re()
-        if gre.match(pattern_student, basename) or \
-           gre.match(pattern_group, basename):
+        if any(gre.match(regex_str, basename) for regex_str in [pattern_student_learn, pattern_student_canvas, pattern_group_learn]):
             submission = {}
             submission['assignment'] = self.assignment
             submission['notebook'] = None
@@ -176,7 +183,7 @@ class Collector:
         errors = []
 
         with tempfile.TemporaryDirectory() as tmpdir:
-            if os.path.isfile(f) and ext == '.ipynb':
+            if os.path.isfile(filename) and ext == '.ipynb':
                 files.append(inputfile)
             elif ext in ['.rar', '.zip', '.7z']:
                 files.extend(self.extract_zip(inputfile, tmpdir))
@@ -331,6 +338,7 @@ def get_notebook_name(api, assignment):
 
 
 def setup():
+    # TODO: Can one traverse `jupyter --paths` to pick up the config file?
     c = None
     my_glob = {'c': c, 'get_config': get_config}
     exec(compile(open('nbgrader_config.py', "rb").read(), 'nbgrader_config.py',
