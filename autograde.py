@@ -171,7 +171,7 @@ class Collector:
             else:
                 logging.fatal("Don't know what to do with file: %s" %
                               inputfile)
-                raise NotImplementedError
+                ## raise NotImplementedError
 
         return submissions, errors
 
