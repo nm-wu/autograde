@@ -139,7 +139,7 @@ class Collector:
                                         r"(?P<y>[0-9]+)_"
                                         r"(?P<courseid>[0-9]+)_"
                                         r"(?P<asgmt>[^_]+)_"
-                                        r"(?P<number>[0-9]{8})")
+                                        r"(?P<number2>[0-9]{8})")
             patterns.append(pattern_group_canvas)
 
         gre = Re()
