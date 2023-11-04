@@ -109,6 +109,9 @@ class Collector:
     def set_interactive(self, interactive):
         self.interactive = interactive
 
+    def set_common_prefix(self, cp):
+        self.common_prefix = cp
+
     def collect_submissions(self, inputfile, target):
         submissions = []
 
@@ -126,13 +129,21 @@ class Collector:
                          r"(?P<firstname>[^_]*)_?"
                          r"(?P<lastname>[^_]*)_"
                          r"(?P<filename>.+)")
-        # TODO: pattern_group_canvas
         filename, ext = os.path.splitext(inputfile)
         basename = os.path.basename(inputfile)
         errors = []
+        patterns = [pattern_student_learn, pattern_student_canvas, pattern_group_learn]
+        if (self.common_prefix is not None):
+            pattern_group_canvas = (fr"^(?P<isgroup>{self.common_prefix})(?P<number>[0-9]+)_"
+                                        r"(?P<x>[0-9]+)_"
+                                        r"(?P<y>[0-9]+)_"
+                                        r"(?P<courseid>[0-9]+)_"
+                                        r"(?P<asgmt>[^_]+)_"
+                                        r"(?P<number>[0-9]{8})")
+            patterns.append(pattern_group_canvas)
 
         gre = Re()
-        if any(gre.match(regex_str, basename) for regex_str in [pattern_student_learn, pattern_student_canvas, pattern_group_learn]):
+        if any(gre.match(regex_str, basename) for regex_str in patterns):
             submission = {}
             submission['assignment'] = self.assignment
             submission['notebook'] = None
@@ -395,6 +406,9 @@ def main():
                         help='Output directory for html feedback',
                         type=str,
                         default='upload')
+    parser.add_argument('-cp', '--commonprefix',
+                        help='Common prefix for (Canvas) group submissions',
+                        type=str)
 
     parser.add_argument('inputfiles', default=[], nargs='+')
     args = parser.parse_args()
@@ -421,6 +435,7 @@ def main():
     collector.set_data_dir(["data", "daten"])
     collector.set_dangerous_dir("dangerous")
     collector.set_interactive(args.interactive)
+    collector.set_common_prefix(args.commonprefix)
 
     collector.register_validator(IllegalStuffValidator(args.dangerous))
 
