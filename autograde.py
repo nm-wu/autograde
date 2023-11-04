@@ -155,6 +155,7 @@ class Collector:
             else:
                 submission['type'] = 'group'
                 submission['number'] = 'group' + gre.last_match.group('number')
+                + (f"_{gre.last_match.group('courseid')}" if 'courseid' in gre.last_match.groupdict() else '')
 
             submission['dir'] = os.path.join(target, submission['number'],
                                              self.assignment)
