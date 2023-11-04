@@ -140,7 +140,7 @@ class Collector:
                                         r"(?P<courseid>[0-9]+)_"
                                         r"(?P<asgmt>[^_]+)_"
                                         r"(?P<number2>[0-9]{8})")
-            patterns.append(pattern_group_canvas)
+            patterns.insert(0, pattern_group_canvas)
 
         gre = Re()
         if any(gre.match(regex_str, basename) for regex_str in patterns):
