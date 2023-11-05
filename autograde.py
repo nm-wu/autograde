@@ -12,6 +12,8 @@ import tempfile
 
 import coloredlogs
 from nbgrader.apps import NbGraderAPI
+from nbconvert import PythonExporter
+
 from traitlets.config import get_config
 import patoolib
 
@@ -356,6 +358,36 @@ def setup():
                  'exec'), my_glob)
     return NbGraderAPI(config=my_glob['c'])
 
+def validate(api, assignment, submissions, target):
+    errors = []
+    exporter = PythonExporter()
+    for submission in submissions:
+        if submission['invalid']:
+            continue
+        student = submission['number']
+        ## 1) convert submissions to py
+        print(submission['notebook'])
+        script, _ = exporter.from_filename(os.path.join(submission['dir'], os.path.basename(submission['notebook'])))
+        with open(os.path.join(target, student + '.py'), 'w') as f:
+            f.write(script)
+    ## 2) create base:
+    release_dir = os.path.join(api.coursedir.release_directory, assignment)
+    jplag_base_dir = os.path.join(target, "base")
+    os.makedirs(jplag_base_dir, exist_ok=True)
+    print(release_dir)
+    ## 2a) get release version of notebooks
+    for rf in [os.path.join(release_dir, f) for f in os.listdir(release_dir) if f.endswith('.ipynb')]:
+        script, _ = exporter.from_filename(rf)
+        with open(os.path.join(jplag_base_dir, os.path.splitext(os.path.basename(rf))[0] + '.py'), 'w') as o:
+            o.write(script)
+    ## 3) call JPlag
+    
+    if not True:
+        logging.fatal()
+        errors.append("validate(): Errors from JPlag (...)")
+        
+    return "done", errors
+
 
 def autograde(api, assignment, submissions, force):
     errors = []
@@ -462,6 +494,12 @@ def main():
         if choice in no:
             collectonly = True
 
+    ## JPlag integration        
+    
+    jplag_dir = os.path.join("jplag", assignment)
+    os.makedirs(jplag_dir, exist_ok=True)
+    validate(api, assignment, submissions, jplag_dir)
+            
     if collectonly:
         logging.info("autograding was disabled, exiting")
         exit(0)
