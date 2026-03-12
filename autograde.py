@@ -9,10 +9,13 @@ import os
 import re
 import shutil
 import tempfile
+import subprocess
 
 import coloredlogs
 from nbgrader.apps import NbGraderAPI
-from nbconvert import PythonExporter
+from nbconvert import ScriptExporter
+from nbformat import current
+from traitlets.config import Config
 
 from traitlets.config import get_config
 import patoolib
@@ -196,7 +199,7 @@ class Collector:
         errors = []
 
         with tempfile.TemporaryDirectory() as tmpdir:
-            if os.path.isfile(filename) and ext == '.ipynb':
+            if os.path.isfile(inputfile) and ext == '.ipynb':
                 files.append(inputfile)
             elif ext in ['.rar', '.zip', '.7z']:
                 files.extend(self.extract_zip(inputfile, tmpdir))
@@ -358,17 +361,37 @@ def setup():
                  'exec'), my_glob)
     return NbGraderAPI(config=my_glob['c'])
 
-def validate(api, assignment, submissions, target):
+def validate(api, assignment, submissions, target, jarPath, nbname):
     errors = []
-    exporter = PythonExporter()
+    c = Config()
+    c.ScriptExporter.exclude_markdown = True
+    ## c.PythonExporter.exclude_input = True
+    c.ScriptExporter.exclude_input_prompt = True
+    c.ScriptExporter.exclude_output_prompt = True
+    ## c.PythonExporter.exclude_output = True
+    c.ExecutePreprocessor.enabled = False
+    exporter = ScriptExporter(config=c)
     for submission in submissions:
-        if submission['invalid']:
-            continue
+        ## print(submission['notebook'], '-->', submission['invalid'])
+        ## if submission['invalid']:
+        ##    continue
         student = submission['number']
         ## 1) convert submissions to py
         print(submission['notebook'])
-        script, _ = exporter.from_filename(os.path.join(submission['dir'], os.path.basename(submission['notebook'])))
-        with open(os.path.join(target, student + '.py'), 'w') as f:
+        ## np = os.path.join(submission['dir'], os.path.basename(submission['notebook']))
+        np = os.path.join(submission['dir'], nbname)
+        with open(np, 'r', encoding='utf-8') as fnp:
+            nb = current.read(fnp, 'json')
+        m = nb.metadata
+
+        language = m.get('kernelspec', {}).get('language', 'python')
+        if language == 'java':
+            fext = '.java'
+        else:
+            fext = m.get('language_info', {}).get('file_extension', '.py')
+        
+        script, _ = exporter.from_filename(np)
+        with open(os.path.join(target, student + fext), 'w') as f:
             f.write(script)
     ## 2) create base:
     release_dir = os.path.join(api.coursedir.release_directory, assignment)
@@ -377,16 +400,34 @@ def validate(api, assignment, submissions, target):
     print(release_dir)
     ## 2a) get release version of notebooks
     for rf in [os.path.join(release_dir, f) for f in os.listdir(release_dir) if f.endswith('.ipynb')]:
+        with open(np, 'r', encoding='utf-8') as fnp:
+            nb = current.read(fnp, 'json')
+        m = nb.metadata
+
+        language = m.get('kernelspec', {}).get('language', 'python')
+        if language == 'java':
+            fext = '.java'
+        else:
+            fext = m.get('language_info', {}).get('file_extension', '.py')
+
         script, _ = exporter.from_filename(rf)
-        with open(os.path.join(jplag_base_dir, os.path.splitext(os.path.basename(rf))[0] + '.py'), 'w') as o:
+        with open(os.path.join(jplag_base_dir, os.path.splitext(os.path.basename(rf))[0] + fext), 'w') as o:
             o.write(script)
     ## 3) call JPlag
-    
+    ## java -jar jplag-3.0.0-jar-with-dependencies.jar -l python3 -bc base submitted
+    try:
+        subprocess.run(['java', '-jar', jarPath, '-l', 'text','-r', target + '_report', target, '-p', fext, '-bc', 'base'],
+                           check=True)
+    except subprocess.CalledProcessError as cpe:
+        logging.fatal("JPlag: " + str(cpe))
+        errors.append("validate(): Error executing JPlag subprocess: " + str(cpe))
     if not True:
         logging.fatal()
         errors.append("validate(): Errors from JPlag (...)")
-        
-    return "done", errors
+
+    logging.info("JPlag run completed, report available as %s" %
+                         target + '.zip')
+    return target + '.zip', errors
 
 
 def autograde(api, assignment, submissions, force):
@@ -441,6 +482,11 @@ def main():
     parser.add_argument('-cp', '--commonprefix',
                         help='Common prefix for (Canvas) group submissions',
                         type=str)
+    parser.add_argument('-jp', '--jplag',
+                        help='Run JPlag on submissions',
+                        type=str,
+                        nargs='?',
+                        const='jplag.jar')
 
     parser.add_argument('inputfiles', default=[], nargs='+')
     args = parser.parse_args()
@@ -494,12 +540,14 @@ def main():
         if choice in no:
             collectonly = True
 
-    ## JPlag integration        
+    ## JPlag integration
+
+    if args.jplag != None:
+        jplag_dir = os.path.join("jplag", assignment)
+        os.makedirs(jplag_dir, exist_ok=True)
+        report, validate_errors = validate(api, assignment, submissions, jplag_dir, args.jplag, notebook_filename)
+        errors.extend(validate_errors)
     
-    jplag_dir = os.path.join("jplag", assignment)
-    os.makedirs(jplag_dir, exist_ok=True)
-    validate(api, assignment, submissions, jplag_dir)
-            
     if collectonly:
         logging.info("autograding was disabled, exiting")
         exit(0)
